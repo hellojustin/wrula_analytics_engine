@@ -1,0 +1,116 @@
+{
+  "objects": [
+    {
+      "id": "S3DataNodeId_F5m1J",
+      "schedule": {
+        "ref": "ScheduleId_I4KdN"
+      },
+      "tableName": "PageView5MinRollup",
+      "name": "page_view_15_minute_rollup",
+      "dataFormat": {
+        "ref": "RegExId_dDOCi"
+      },
+      "type": "DynamoDBDataNode"
+    },
+    {
+      "id": "HiveActivityId_Duc7F",
+      "input": {
+        "ref": "S3DataNodeId_y1Oa0"
+      },
+      "schedule": {
+        "ref": "ScheduleId_I4KdN"
+      },
+      "hiveScript": "DROP TABLE page_view_record;\nDROP TABLE page_view_5min_rollup;\n\nCREATE EXTERNAL TABLE page_view_record ( id string, timestamp bigint, account_id string, ip string, new_session bigint, new_visitor bigint, page_domain string, path string, session_id string, user_agent string, visitor_id string, params string )\nSTORED BY 'org.apache.hadoop.hive.dynamodb.DynamoDBStorageHandler'                                                                                                                        TBLPROPERTIES ('dynamodb.table.name' = 'PageViewRecord', 'dynamodb.column.mapping' = 'id:id,timestamp:timestamp,account_id:account_id,ip:ip,new_session:new_session,new_visitor:new_visitor,page_domain:page_domain,path:path,session_id:session_id,user_agent:user_agent,visitor_id:visitor_id,params:params');\n\nCREATE EXTERNAL TABLE page_view_5min_rollup ( id string, timestamp bigint, account_id string, page_domain string, path string, user_agent string, page_views bigint, new_visitors bigint )\nSTORED BY 'org.apache.hadoop.hive.dynamodb.DynamoDBStorageHandler'\nTBLPROPERTIES( 'dynamodb.table.name' = 'PageView5MinRollup', 'dynamodb.column.mapping' = 'id:id,timestamp:timestamp,account_id:account_id,page_domain:page_domain,path:path,user_agent:user_agent,page_views:page_views,new_visitors:new_visitors');\n\nINSERT OVERWRITE TABLE page_view_5min_rollup\nSELECT reflect(\"java.util.UUID\", \"randomUUID\") as id, (floor(unix_timestamp()/900))*900 as timestamp, account_id, page_domain, path, user_agent, count(id) as page_views, sum(new_visitor) as new_visitors\nFROM page_view_record\nWHERE timestamp > ((floor(unix_timestamp()/900))*900)-900 and timestamp <= (floor(unix_timestamp()/900))*900\nGROUP BY account_id, page_domain, path, user_agent;\n\nDROP TABLE page_view_record;\nDROP TABLE page_view_5min_rollup;",
+      "generatedScriptsPath": "s3://wrula/emrscripts/",
+      "name": "perform_15_minute_rollup",
+      "runsOn": {
+        "ref": "EmrClusterId_9nimM"
+      },
+      "output": {
+        "ref": "S3DataNodeId_F5m1J"
+      },
+      "type": "HiveActivity"
+    },
+    {
+      "emrLogUri": "s3://wrula/emrlogs/",
+      "terminateAfter": "30 Minutes",
+      "keyPair": "jmolineaux-e84",
+      "masterInstanceType": "m1.small",
+      "enableDebugging": "true",
+      "coreInstanceCount": "4",
+      "maximumRetries": "1",
+      "logUri": "s3://wrula/emrlogs/",
+      "type": "EmrCluster",
+      "id": "EmrClusterId_9nimM",
+      "schedule": {
+        "ref": "ScheduleId_I4KdN"
+      },
+      "coreInstanceType": "m1.small",
+      "installHive": "latest",
+      "name": "wrula_analytics_cluster",
+      "actionOnTaskFailure": "continue",
+      "actionOnResourceFailure": "retryAll"
+    },
+    {
+      "id": "S3DataNodeId_y1Oa0",
+      "schedule": {
+        "ref": "ScheduleId_I4KdN"
+      },
+      "tableName": "PageViewRecord",
+      "name": "page_view_record",
+      "dataFormat": {
+        "ref": "DynamoDBDataFormatId_UoV9m"
+      },
+      "type": "DynamoDBDataNode"
+    },
+    {
+      "id": "ScheduleId_I4KdN",
+      "startDateTime": "2014-04-27T10:00:00",
+      "name": "wrula_15_minute_rollup_period",
+      "type": "Schedule",
+      "period": "15 Minutes",
+      "endDateTime": "2014-05-01T00:00:00"
+    },
+    {
+      "id": "Default",
+      "scheduleType": "TIMESERIES",
+      "failureAndRerunMode": "CASCADE",
+      "name": "Default",
+      "role": "DataPipelineDefaultRole",
+      "resourceRole": "DataPipelineDefaultResourceRole"
+    },
+    {
+      "id": "RegExId_dDOCi",
+      "name": "export_rollup_data_format",
+      "column": [
+        "id string",
+        "timestamp bigint",
+        "account_id string",
+        "page_domain string",
+        "path string",
+        "user_agent string",
+        "page_views bigint",
+        "new_visitors bigint"
+      ],
+      "type": "DynamoDBExportDataFormat"
+    },
+    {
+      "id": "DynamoDBDataFormatId_UoV9m",
+      "name": "import_raw_data_format",
+      "column": [
+        "id string",
+        "account_id string",
+        "ip string",
+        "new_session bigint",
+        "new_visitor bigint",
+        "page_domain string",
+        "path string",
+        "session_id string",
+        "user_agent string",
+        "visitor_id string",
+        "params string"
+      ],
+      "type": "DynamoDBDataFormat"
+    }
+  ]
+}

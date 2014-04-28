@@ -1,0 +1,70 @@
+DROP TABLE page_view_record;
+DROP TABLE page_view_5min_rollup;
+
+
+
+CREATE EXTERNAL TABLE page_view_record
+  ( 
+    id          string, 
+    timestamp   bigint, 
+    account_id  string, 
+    ip          string, 
+    new_session bigint, 
+    new_visitor bigint, 
+    page_domain string, 
+    path        string, 
+    session_id  string, 
+    user_agent  string, 
+    visitor_id  string, 
+    params      string 
+  )
+STORED BY 'org.apache.hadoop.hive.dynamodb.DynamoDBStorageHandler'
+TBLPROPERTIES
+  (
+    'dynamodb.table.name'     = 'PageViewRecord', 
+    'dynamodb.column.mapping' = 'id:id,timestamp:timestamp,account_id:account_id,ip:ip,new_session:new_session,new_visitor:new_visitor,page_domain:page_domain,path:path,session_id:session_id,user_agent:user_agent,visitor_id:visitor_id,params:params'
+  );
+
+
+
+CREATE EXTERNAL TABLE page_view_5min_rollup
+  ( 
+    id           string, 
+    timestamp    bigint, 
+    account_id   string, 
+    page_domain  string, 
+    path         string, 
+    user_agent   string, 
+    page_views   bigint, 
+    new_visitors bigint
+  )
+STORED BY 'org.apache.hadoop.hive.dynamodb.DynamoDBStorageHandler'
+TBLPROPERTIES
+  ( 
+    'dynamodb.table.name'     = 'PageView5MinRollup',
+    'dynamodb.column.mapping' = 'id:id,timestamp:timestamp,account_id:account_id,page_domain:page_domain,path:path,user_agent:user_agent,page_views:page_views,new_visitors:new_visitors'
+  );
+
+
+
+INSERT OVERWRITE TABLE page_view_5min_rollup
+SELECT reflect("java.util.UUID", "randomUUID") as id, 
+       (floor(unix_timestamp()/900))*900       as timestamp, 
+       account_id, 
+       page_domain, 
+       path, 
+       user_agent, 
+       count(id)                               as page_views, 
+       sum(new_visitor)                        as new_visitors
+FROM   page_view_record
+WHERE  timestamp > ((floor(unix_timestamp()/900))*900)-900 and 
+       timestamp <= (floor(unix_timestamp()/900))*900
+GROUP  BY account_id, 
+          page_domain, 
+          path, 
+          user_agent;
+
+
+
+DROP TABLE page_view_record;
+DROP TABLE page_view_5min_rollup;
